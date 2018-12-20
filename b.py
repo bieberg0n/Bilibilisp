@@ -17,6 +17,15 @@ def division(args):
     return reduce(lambda x, y: x / y, args)
 
 
+def is_num(a):
+    nums = {str(i) for i in range(10)}
+    for char in a:
+        if char not in nums:
+            return False
+    else:
+        return True
+
+
 def to_type(a):
     if a == '+':
         return sum
@@ -26,7 +35,7 @@ def to_type(a):
         return multiplication
     elif a == '/':
         return division
-    elif a in [str(i) for i in range(10)]:
+    elif is_num(a):
         return int(a)
 
 
@@ -42,7 +51,7 @@ def _parse(exps, exp_list, char_list):
     try:
         char = next(exps)
     except StopIteration:
-        if len(char_list) == 1:
+        if char_list:
             exp_list.append(to_type(''.join(char_list)))
         return parse_exp(exp_list)
 
@@ -70,7 +79,7 @@ def parse(exp_str):
     return _parse(exps, [], [])
 
 
-log(parse('5'))
-log(parse('(+ 1 2)'))
+log(parse('15'))
+log(parse('(+ 11 2)'))
 log(parse('+ 1 2 (* 3 4)'))
 log(parse('- 4 1 2'))
