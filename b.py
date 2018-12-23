@@ -2,7 +2,8 @@ from functools import reduce
 
 
 def log(*args):
-    print(*args)
+    ...
+    # print(*args)
 
 
 def cut(args):
@@ -51,6 +52,7 @@ class BilibilispParser:
     def __init__(self):
         self.env_stack = []
         self.env = dict()
+
         self.exp = []
         self.stack = []
         self.char_list = []
