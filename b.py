@@ -35,13 +35,13 @@ class Closure:
     def parse(self, value):
         parser = BilibilispParser()
         parser.env_stack = self.env_stack
-        parser.current_env[self.key] = value
+        parser.env[self.key] = value
         for o in self.exp:
             if isinstance(o, str):
-                parser.current_exp.append(parser.to_type(o))
+                parser.exp.append(parser.to_type(o))
             else:
-                parser.current_exp.append(o)
-        log('lambda run, exp:', parser.current_exp, 'env stack:', parser.env_stack)
+                parser.exp.append(o)
+        log('lambda run, exp:', parser.exp, 'env stack:', parser.env_stack)
         result = parser.parse_exp()
         log('lambda result:', result)
         return result
@@ -50,17 +50,38 @@ class Closure:
 class BilibilispParser:
     def __init__(self):
         self.env_stack = []
-        self.current_env = dict()
-        self.current_exp = []
+        self.env = dict()
+        self.exp = []
         self.stack = []
         self.char_list = []
-        self.define_mode = False
 
-        self.lambda_mode = 0
+        self.mode_stack = []
+        self.mode = ['', 0]
         self.current_lambda = None
 
+    def push_mode(self):
+        if self.mode[0]:
+            self.mode_stack.append(self.mode)
+
+    def enable_define_mode(self):
+        self.push_mode()
+        self.mode = ['define', 1]
+
+    def enable_lambda_mode(self):
+        self.push_mode()
+        self.mode = ['lambda', 2]
+
+    def disable_mode(self):
+        name, lv = self.mode
+        if lv >= 1:
+            self.mode[1] -= 1
+        elif len(self.mode_stack) > 0:
+            self.mode = self.mode_stack.pop()
+        else:
+            self.mode = ['', 0]
+
     def get_val(self, a):
-        current = self.current_env.get(a)
+        current = self.env.get(a)
         if current is not None:
             return current, True
         else:
@@ -71,10 +92,11 @@ class BilibilispParser:
             else:
                 return None, False
 
-    def let(self, args):
+    def var(self, args):
         log('args:', args)
         k, v = args
-        self.current_env[k] = v
+        self.env[k] = v
+        log('env:', self.env, self.env_stack)
 
     def to_type(self, a):
         value, ok = self.get_val(a)
@@ -88,12 +110,12 @@ class BilibilispParser:
             return multiplication
         elif a == '/':
             return division
-        elif a == 'let':
-            self.define_mode = True
-            return self.let
+        elif a == 'var':
+            self.enable_define_mode()
+            return self.var
         elif a == 'lambda':
+            self.enable_lambda_mode()
             self.current_lambda = Closure(self.env_stack)
-            self.lambda_mode = 2
             return self.current_lambda
         elif is_num(a):
             return int(a)
@@ -101,9 +123,9 @@ class BilibilispParser:
             return a
 
     def parse_exp(self):
-        exp = self.current_exp
-        log('current exp:', self.current_exp)
-        self.current_exp = []
+        exp = self.exp
+        log('current exp:', self.exp)
+        self.exp = []
         if len(exp) == 1:
             return exp[0]
 
@@ -115,58 +137,59 @@ class BilibilispParser:
 
     def deal_char_list(self):
         if self.char_list:
-            obj = self.to_type(''.join(self.char_list))
+            word = ''.join(self.char_list)
+            mode, lv = self.mode
+            if mode == 'define' and lv == 1:
+                obj = word
+                self.disable_mode()
+            else:
+                obj = self.to_type(word)
+            self.exp.append(obj)
             self.char_list = []
-            self.current_exp.append(obj)
             log('current exp add obj:', obj)
 
-    def current_exp_has_key(self, key):
-        if self.current_exp:
-            op = self.current_exp[0]
-            if hasattr(op, '__call__') and op.__name__ == key:
-                return True
-            elif isinstance(op, Closure) and key == 'lambda':
-                return True
-        else:
-            return False
-
     def parse_char(self, char):
+        mode_name, lv = self.mode
         if char == '(':
-            if self.current_exp_has_key('let') or self.current_exp_has_key('lambda'):
+            log('(mode:', mode_name, 'mode stack:', self.mode_stack, 'mode lv:', lv)
+            if self.mode[0] == 'lambda':
                 return
-            #     self.define_mode = True
-
-            # elif self.current_exp_has_key('lambda'):
-            #     self.current_lambda = Closure(self.env_stack)
-            #     self.lambda_mode = 2
-
             else:
-                self.stack.append(self.current_exp)
-                self.current_exp = []
-                self.env_stack.append(self.current_env)
-                self.current_env = dict()
+                self.stack.append(self.exp)
+                log('push stack:', self.stack)
+                self.exp = []
+                self.env_stack.append(self.env)
+                self.env = dict()
 
         elif char == ')':
+            log(')mode:', mode_name, 'mode stack:', self.mode_stack, 'mode lv:', lv)
             self.deal_char_list()
-            if self.define_mode:
+            if mode_name == 'define':
+                log('exp stack:', self.stack)
                 self.parse_exp()
-                self.define_mode = False
+                self.disable_mode()
 
-            elif self.lambda_mode == 2:
-                self.current_lambda.key = self.current_exp.pop()
-                self.current_exp = []
-                self.lambda_mode -= 1
+            elif mode_name == 'lambda' and lv == 2:
+                self.current_lambda.key = self.exp.pop()
+                log('lambda add key:', self.current_lambda.key)
+                self.exp = []
+                self.disable_mode()
 
-            elif self.lambda_mode == 1:
-                self.current_lambda.exp = self.current_exp
-                self.current_exp = [self.current_lambda]
-                self.lambda_mode -= 1
+            elif mode_name == 'lambda' and lv == 1:
+                self.current_lambda.exp = self.exp
+                log('lambda add exp:', self.exp)
+                self.disable_mode()
+
+            elif mode_name == 'lambda' and lv == 0:
+                self.exp = self.stack.pop()
+                self.exp.append(self.current_lambda)
+                self.disable_mode()
 
             else:
-                log('parse exp:', self.current_exp)
+                log('parse exp:', self.exp)
                 result = self.parse_exp()
-                self.current_exp = self.stack.pop()
-                self.current_exp.append(result)
+                self.exp = self.stack.pop()
+                self.exp.append(result)
 
         elif char == ' ':
             self.deal_char_list()
@@ -181,35 +204,6 @@ class BilibilispParser:
                 self.parse_char(char)
 
         self.deal_char_list()
-        return self.parse_exp()
-
-
-def test():
-    parser = BilibilispParser()
-    assert(parser.parse('15') == 15)
-    assert(parser.parse('(+ 11 2)') == 13)
-    assert(parser.parse('''(+ 11
-  2)''') == 13)
-    assert(parser.parse('+ 1 2 (* 3 4)') == 15)
-    assert(parser.parse('- 4 1 2') == 1)
-
-    exp = '''
-(let (a 2)
-  (let (b 3)
-    (let (c 4)
-      (* a b c)
-    )
-  )
-)
-'''
-    assert(parser.parse(exp) == 24)
-
-    exp = '''
-(let (y 3)
-     ((lambda (x) (* x y)) 2)
-)
-'''
-    log(parser.parse(exp))
-
-
-test()
+        result = self.parse_exp()
+        self.disable_mode()
+        return result
