@@ -11,13 +11,13 @@ Python实现的LISP子集.
 >>> exp = '(* 3 (+ 4 5))'
 >>> pr.parse(exp)
 27
->>> exp = '(var a 9) (* a a)'
+>>> exp = '(var a 9 (* a a))'
 >>> pr.parse(exp)
 81
->>> exp = '((lambda (x) (* x 3)) 2)'
+>>> exp = '((lambda x (* x 3)) 2)'
 >>> pr.parse(exp)
 6
->>> exp = '(var y 4) ((lambda (x) (* x y)) 2)'
+>>> exp = '(var y 4 ((lambda x (* x y)) 2))'
 >>> pr.parse(exp)
 8
 ```
